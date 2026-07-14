@@ -208,9 +208,9 @@ export default function Workspace() {
         <div className="flex-1 overflow-hidden">
           {mobileTab === "files" && (
             <FileTree
-              files={files ?? []}
+              nodes={files ?? []}
               selectedPath={selectedPath}
-              onSelect={handleFileSelect}
+              onSelectFile={handleFileSelect}
             />
           )}
           {mobileTab === "editor" && (
@@ -267,9 +267,9 @@ export default function Workspace() {
           {/* Left — File tree */}
           <Panel defaultSize={18} minSize={12} maxSize={30}>
             <FileTree
-              files={files ?? []}
+              nodes={files ?? []}
               selectedPath={selectedPath}
-              onSelect={setSelectedPath}
+              onSelectFile={setSelectedPath}
             />
           </Panel>
 

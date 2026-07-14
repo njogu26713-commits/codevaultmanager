@@ -88,4 +88,22 @@ export async function connectDB(): Promise<void> {
   }
   await mongoose.connect(uri);
   logger.info("Connected to MongoDB");
+
+  // Drop any stale indexes that conflict with the current schema.
+  // This handles cases where the collection was created by a different schema version.
+  try {
+    const userCollection = mongoose.connection.db?.collection("users");
+    if (userCollection) {
+      const indexes = await userCollection.indexes();
+      const stale = indexes.filter(
+        (idx) => idx.name && idx.name !== "_id_" && idx.name !== "email_1",
+      );
+      for (const idx of stale) {
+        await userCollection.dropIndex(idx.name as string);
+        logger.info({ index: idx.name }, "Dropped stale index from users collection");
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not clean up stale indexes (non-fatal)");
+  }
 }

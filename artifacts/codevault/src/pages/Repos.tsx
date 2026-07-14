@@ -29,10 +29,10 @@ interface Workspace {
 }
 
 const TEMPLATES: Array<{ value: Template; label: string; description: string; icon: string }> = [
-  { value: "node",    label: "Node.js",   description: "index.js + package.json",     icon: "🟩" },
-  { value: "python",  label: "Python",    description: "main.py + requirements.txt",  icon: "🐍" },
-  { value: "react",   label: "React",     description: "Vite + React",               icon: "⚛️" },
-  { value: "express", label: "Express",   description: "REST API server",             icon: "🚂" },
+  { value: "node",    label: "Node.js",  description: "index.js + package.json",    icon: "🟩" },
+  { value: "python",  label: "Python",   description: "main.py + requirements.txt", icon: "🐍" },
+  { value: "react",   label: "React",    description: "Vite + React",              icon: "⚛️" },
+  { value: "express", label: "Express",  description: "REST API server",            icon: "🚂" },
 ]
 
 // ---------------------------------------------------------------------------
@@ -129,12 +129,12 @@ function NewProjectDialog({ onCreate }: { onCreate: (id: string) => void }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="gap-1.5">
+        <Button size="sm" className="gap-1.5 h-9">
           <Plus className="w-4 h-4" />
-          New Project
+          <span>New Project</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md w-[calc(100vw-2rem)] rounded-2xl">
         <DialogHeader>
           <DialogTitle>Create a new project</DialogTitle>
         </DialogHeader>
@@ -147,38 +147,31 @@ function NewProjectDialog({ onCreate }: { onCreate: (id: string) => void }) {
               value={name}
               onChange={e => setName(e.target.value)}
               required
+              className="h-11 text-base"
             />
           </div>
 
           <div className="space-y-2">
             <Label>Starting point</Label>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setType("blank")}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  type === "blank"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <div className="text-lg mb-1">📄</div>
-                <div className="text-sm font-medium">Blank</div>
-                <div className="text-xs text-muted-foreground">Empty project</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType("template")}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  type === "template"
-                    ? "border-primary bg-primary/5 ring-1 ring-primary"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <div className="text-lg mb-1">🗂️</div>
-                <div className="text-sm font-medium">Template</div>
-                <div className="text-xs text-muted-foreground">Starter files</div>
-              </button>
+              {(["blank", "template"] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    type === t
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="text-lg mb-1">{t === "blank" ? "📄" : "🗂️"}</div>
+                  <div className="text-sm font-medium capitalize">{t}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {t === "blank" ? "Empty project" : "Starter files"}
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -191,7 +184,7 @@ function NewProjectDialog({ onCreate }: { onCreate: (id: string) => void }) {
                     key={t.value}
                     type="button"
                     onClick={() => setTemplate(t.value)}
-                    className={`rounded-lg border p-3 text-left transition-colors ${
+                    className={`rounded-xl border p-3 text-left transition-colors ${
                       template === t.value
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
                         : "border-border hover:bg-muted/50"
@@ -207,12 +200,16 @@ function NewProjectDialog({ onCreate }: { onCreate: (id: string) => void }) {
           )}
 
           {error && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+              {error}
+            </p>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={create.isPending || !name.trim()}>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1 sm:flex-none">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={create.isPending || !name.trim()} className="flex-1 sm:flex-none">
               {create.isPending ? "Creating…" : "Create project"}
             </Button>
           </DialogFooter>
@@ -243,7 +240,9 @@ export default function Repos() {
 
   const filtered = React.useMemo(() => {
     if (!workspaces) return []
-    return workspaces.filter(w => w.name.toLowerCase().includes(search.toLowerCase()))
+    return workspaces.filter(w =>
+      w.name.toLowerCase().includes(search.toLowerCase()),
+    )
   }, [workspaces, search])
 
   const initials = user?.name
@@ -253,56 +252,56 @@ export default function Repos() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
-      <header className="border-b px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center transform -rotate-6">
-            <Code2 className="w-4 h-4" />
+      <header className="border-b px-4 py-3 flex items-center justify-between gap-3 sticky top-0 bg-background z-10">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 bg-primary text-primary-foreground rounded-lg flex items-center justify-center transform -rotate-6 shrink-0">
+            <Code2 className="w-3.5 h-3.5" />
           </div>
-          <span className="font-bold text-lg">CodeVault</span>
+          <span className="font-bold text-base">CodeVault</span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold">
-              {initials}
-            </div>
-            <span>{user?.name}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-semibold shrink-0">
+            {initials}
           </div>
+          <span className="text-sm text-muted-foreground hidden sm:block truncate max-w-[140px]">
+            {user?.name}
+          </span>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={handleLogout}
             disabled={logout.isPending}
-            className="gap-1.5 text-muted-foreground"
+            className="h-8 w-8 text-muted-foreground"
+            title="Sign out"
           >
             <LogOut className="w-4 h-4" />
-            Sign out
           </Button>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-5">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold">Your Projects</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <h1 className="text-xl font-bold">Your Projects</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Open a project to start coding with AI
             </p>
           </div>
           <NewProjectDialog onCreate={id => setLocation(`/workspace/${id}`)} />
         </div>
 
-        {/* Search */}
+        {/* Search — only show if enough projects */}
         {workspaces && workspaces.length > 4 && (
           <Input
             placeholder="Search projects…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="max-w-sm"
+            className="h-10"
           />
         )}
 
-        {/* List */}
+        {/* Project list */}
         {wsLoading ? (
           <div className="space-y-2">
             {[...Array(3)].map((_, i) => (
@@ -310,8 +309,8 @@ export default function Repos() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="border border-dashed rounded-xl p-12 text-center space-y-3">
-            <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/50" />
+          <div className="border border-dashed rounded-2xl p-10 text-center space-y-3">
+            <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/40" />
             <p className="font-medium text-muted-foreground">
               {search ? "No matching projects" : "No projects yet"}
             </p>
@@ -322,40 +321,38 @@ export default function Repos() {
             )}
           </div>
         ) : (
-          <div className="border rounded-xl overflow-hidden bg-card divide-y">
+          <div className="border rounded-2xl overflow-hidden bg-card divide-y">
             {filtered.map(ws => (
-              <div
+              <button
                 key={ws.id}
-                className="p-4 flex items-center justify-between hover:bg-muted/40 transition-colors group"
+                className="w-full p-4 flex items-center justify-between hover:bg-muted/40 active:bg-muted/70 transition-colors text-left"
+                onClick={() => ws.status === "ready" && setLocation(`/workspace/${ws.id}`)}
+                disabled={ws.status !== "ready"}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-2xl">{templateIcon(ws.template)}</span>
+                  <span className="text-2xl shrink-0">{templateIcon(ws.template)}</span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm truncate">{ws.name}</span>
                       <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
                         {ws.type === "template" ? templateLabel(ws.template) : "Blank"}
                       </Badge>
                       {ws.status === "error" && (
-                        <Badge variant="destructive" className="text-[10px] px-1.5 shrink-0">Error</Badge>
+                        <Badge variant="destructive" className="text-[10px] px-1.5 shrink-0">
+                          Error
+                        </Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <Clock className="w-3 h-3" />
+                      <Clock className="w-3 h-3 shrink-0" />
                       <span>{timeAgo(ws.lastAccessedAt ?? ws.createdAt)}</span>
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => setLocation(`/workspace/${ws.id}`)}
-                  disabled={ws.status !== "ready"}
-                >
-                  Open
-                </Button>
-              </div>
+                <span className="text-xs font-medium text-primary shrink-0 pl-2">
+                  {ws.status === "ready" ? "Open →" : ws.status === "creating" ? "…" : ""}
+                </span>
+              </button>
             ))}
           </div>
         )}

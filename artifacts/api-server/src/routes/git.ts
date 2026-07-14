@@ -1,19 +1,11 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, workspacesTable } from "@workspace/db";
-import {
-  GetDiffParams,
-  ListBranchesParams,
-  SwitchBranchParams,
-  SwitchBranchBody,
-  CommitChangesParams,
-  CommitChangesBody,
-} from "@workspace/api-zod";
+import { z } from "zod";
+import { Workspace } from "../lib/db";
 import {
   getDiff,
   listBranches,
   switchBranch,
-  commitAndPush,
+  commitChanges,
 } from "../lib/workspace-manager";
 import { generateCommitMessage } from "../lib/groq-client";
 
@@ -28,132 +20,61 @@ function requireAuth(req: any, res: any, next: any): void {
 }
 
 async function getOwnedWorkspace(userId: string, workspaceId: string) {
-  const [w] = await db
-    .select()
-    .from(workspacesTable)
-    .where(
-      and(
-        eq(workspacesTable.id, workspaceId),
-        eq(workspacesTable.userId, userId),
-      ),
-    );
-  return w ?? null;
+  return Workspace.findOne({ _id: workspaceId, userId });
 }
 
-// Get diff of uncommitted changes
+const SwitchBranchBody = z.object({ branch: z.string().min(1) });
+const CommitBody = z.object({ message: z.string().optional() });
+
+// Get uncommitted diff
 router.get("/workspaces/:workspaceId/diff", requireAuth, async (req, res): Promise<void> => {
-  const params = GetDiffParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
   const user = req.user as Express.User;
-  const workspace = await getOwnedWorkspace(user.id, params.data.workspaceId);
-  if (!workspace) {
-    res.status(404).json({ error: "Workspace not found" });
-    return;
-  }
+  const workspace = await getOwnedWorkspace(user.id, req.params.workspaceId);
+  if (!workspace) { res.status(404).json({ error: "Workspace not found" }); return; }
 
-  const diffs = await getDiff(workspace.id);
+  const diffs = await getDiff(workspace._id);
   res.json(diffs);
 });
 
 // List branches
 router.get("/workspaces/:workspaceId/branches", requireAuth, async (req, res): Promise<void> => {
-  const params = ListBranchesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
   const user = req.user as Express.User;
-  const workspace = await getOwnedWorkspace(user.id, params.data.workspaceId);
-  if (!workspace) {
-    res.status(404).json({ error: "Workspace not found" });
-    return;
-  }
+  const workspace = await getOwnedWorkspace(user.id, req.params.workspaceId);
+  if (!workspace) { res.status(404).json({ error: "Workspace not found" }); return; }
 
-  const branches = await listBranches(workspace.id);
+  const branches = await listBranches(workspace._id);
   res.json(branches);
 });
 
 // Switch branch
 router.patch("/workspaces/:workspaceId/branch", requireAuth, async (req, res): Promise<void> => {
-  const params = SwitchBranchParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
   const body = SwitchBranchBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+  if (!body.success) { res.status(400).json({ error: "branch is required" }); return; }
 
   const user = req.user as Express.User;
-  const workspace = await getOwnedWorkspace(user.id, params.data.workspaceId);
-  if (!workspace) {
-    res.status(404).json({ error: "Workspace not found" });
-    return;
-  }
+  const workspace = await getOwnedWorkspace(user.id, req.params.workspaceId);
+  if (!workspace) { res.status(404).json({ error: "Workspace not found" }); return; }
 
-  await switchBranch(workspace.id, body.data.branch);
-
-  const [updated] = await db
-    .update(workspacesTable)
-    .set({ branch: body.data.branch })
-    .where(eq(workspacesTable.id, workspace.id))
-    .returning();
-
-  res.json({
-    id: updated.id,
-    repoFullName: updated.repoFullName,
-    branch: updated.branch,
-    status: updated.status,
-    createdAt: updated.createdAt.toISOString(),
-    lastAccessedAt: updated.lastAccessedAt?.toISOString() ?? null,
-  });
+  await switchBranch(workspace._id, body.data.branch);
+  res.json({ branch: body.data.branch });
 });
 
-// Commit all staged changes and push
+// Commit changes (local commit; push if remote is configured)
 router.post("/workspaces/:workspaceId/commit", requireAuth, async (req, res): Promise<void> => {
-  const params = CommitChangesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
-
-  const body = CommitChangesBody.safeParse(req.body);
-  if (!body.success) {
-    res.status(400).json({ error: body.error.message });
-    return;
-  }
+  const body = CommitBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "Invalid input" }); return; }
 
   const user = req.user as Express.User;
-  const workspace = await getOwnedWorkspace(user.id, params.data.workspaceId);
-  if (!workspace) {
-    res.status(404).json({ error: "Workspace not found" });
-    return;
+  const workspace = await getOwnedWorkspace(user.id, req.params.workspaceId);
+  if (!workspace) { res.status(404).json({ error: "Workspace not found" }); return; }
+
+  let message = body.data.message ?? null;
+  if (!message) {
+    const diffs = await getDiff(workspace._id);
+    message = await generateCommitMessage(diffs).catch(() => "feat: apply changes");
   }
 
-  // Generate commit message if not provided
-  let commitMessage = body.data.message ?? null;
-  if (!commitMessage) {
-    const diffs = await getDiff(workspace.id);
-    commitMessage = await generateCommitMessage(diffs).catch(
-      () => "feat: apply AI-generated changes",
-    );
-  }
-
-  const result = await commitAndPush(
-    user.accessToken,
-    workspace.id,
-    commitMessage,
-    workspace.repoFullName,
-  );
-
+  const result = await commitChanges(workspace._id, message);
   res.json(result);
 });
 

@@ -13,6 +13,9 @@ const isProd = process.env.NODE_ENV === "production";
 
 const app: Express = express();
 
+// Trust Replit's reverse proxy so secure cookies and X-Forwarded-* headers work correctly
+app.set("trust proxy", 1);
+
 // ---------------------------------------------------------------------------
 // CORS — dev only (in prod the Express server serves the frontend directly)
 // ---------------------------------------------------------------------------

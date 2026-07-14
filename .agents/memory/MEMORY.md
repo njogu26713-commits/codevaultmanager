@@ -1,0 +1,1 @@
+- [CodeVault setup](codevault-setup.md) — architecture decisions, codegen quirks, OAuth/Groq setup notes

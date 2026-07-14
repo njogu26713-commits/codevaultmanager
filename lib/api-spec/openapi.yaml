@@ -3,20 +3,29 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CodeVault API — AI software engineer that builds and pushes to GitHub repos
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: repos
+    description: GitHub repository operations
+  - name: workspaces
+    description: Workspace (cloned repo) operations
+  - name: files
+    description: File operations within a workspace
+  - name: messages
+    description: AI chat messages within a workspace
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +33,661 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out the current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /repos:
+    get:
+      operationId: listRepos
+      tags: [repos]
+      summary: List the current user's GitHub repositories
+      responses:
+        "200":
+          description: List of repos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repo"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createRepo
+      tags: [repos]
+      summary: Create a new GitHub repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepoCreate"
+      responses:
+        "201":
+          description: Created repository
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repo"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /workspaces:
+    get:
+      operationId: listWorkspaces
+      tags: [workspaces]
+      summary: List all open workspaces for the current user
+      responses:
+        "200":
+          description: List of workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: openWorkspace
+      tags: [workspaces]
+      summary: Clone and open a repository as a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceOpen"
+      responses:
+        "201":
+          description: Opened workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /workspaces/{workspaceId}:
+    get:
+      operationId: getWorkspace
+      tags: [workspaces]
+      summary: Get a workspace by ID
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: closeWorkspace
+      tags: [workspaces]
+      summary: Close and clean up a workspace
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace closed
+
+  /workspaces/{workspaceId}/stats:
+    get:
+      operationId: getWorkspaceStats
+      tags: [workspaces]
+      summary: Get stats for a workspace (files, messages, last commit)
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceStats"
+
+  /workspaces/{workspaceId}/files:
+    get:
+      operationId: listFiles
+      tags: [files]
+      summary: List all files in the workspace as a tree
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File tree
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileNode"
+
+  /workspaces/{workspaceId}/files/read:
+    post:
+      operationId: readFile
+      tags: [files]
+      summary: Get the content of a file by path (in request body)
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReadFileInput"
+      responses:
+        "200":
+          description: File content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileContent"
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /workspaces/{workspaceId}/files/write:
+    put:
+      operationId: writeFile
+      tags: [files]
+      summary: Write or update a file's content
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriteFileInput"
+      responses:
+        "200":
+          description: Updated file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileContent"
+
+  /workspaces/{workspaceId}/diff:
+    get:
+      operationId: getDiff
+      tags: [workspaces]
+      summary: Get a diff of all uncommitted changes in the workspace
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of file diffs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileDiff"
+
+  /workspaces/{workspaceId}/branches:
+    get:
+      operationId: listBranches
+      tags: [workspaces]
+      summary: List all branches in the workspace repo
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Branch"
+
+  /workspaces/{workspaceId}/branch:
+    patch:
+      operationId: switchBranch
+      tags: [workspaces]
+      summary: Switch to a different branch
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BranchSwitch"
+      responses:
+        "200":
+          description: Updated workspace after branch switch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+
+  /workspaces/{workspaceId}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: Get the chat history for a workspace
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message and get AI-generated code changes
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "200":
+          description: AI response with file changes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiResponse"
+
+  /workspaces/{workspaceId}/commit:
+    post:
+      operationId: commitChanges
+      tags: [workspaces]
+      summary: Stage all changes, commit with an AI-generated message, and push
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitInput"
+      responses:
+        "200":
+          description: Commit result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitResult"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      required: [id, githubId, login, avatarUrl]
+      properties:
+        id:
+          type: string
+        githubId:
+          type: integer
+        login:
+          type: string
+        name:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        avatarUrl:
+          type: string
+
+    Repo:
+      type: object
+      required: [id, name, fullName, private, defaultBranch, url]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        fullName:
+          type: string
+        description:
+          type: ["string", "null"]
+        private:
+          type: boolean
+        defaultBranch:
+          type: string
+        url:
+          type: string
+        updatedAt:
+          type: ["string", "null"]
+
+    RepoCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        private:
+          type: boolean
+        autoInit:
+          type: boolean
+
+    Workspace:
+      type: object
+      required: [id, repoFullName, branch, status, createdAt]
+      properties:
+        id:
+          type: string
+        repoFullName:
+          type: string
+        branch:
+          type: string
+        status:
+          type: string
+          enum: [ready, cloning, error]
+        createdAt:
+          type: string
+        lastAccessedAt:
+          type: ["string", "null"]
+
+    WorkspaceOpen:
+      type: object
+      required: [repoFullName, branch]
+      properties:
+        repoFullName:
+          type: string
+        branch:
+          type: string
+
+    WorkspaceStats:
+      type: object
+      required: [totalFiles, totalMessages, currentBranch]
+      properties:
+        totalFiles:
+          type: integer
+        totalMessages:
+          type: integer
+        currentBranch:
+          type: string
+        lastCommitMessage:
+          type: ["string", "null"]
+        lastCommitDate:
+          type: ["string", "null"]
+        uncommittedChanges:
+          type: integer
+
+    FileNode:
+      type: object
+      required: [path, name, type]
+      properties:
+        path:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [file, dir]
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileNode"
+
+    FileContent:
+      type: object
+      required: [path, content, language]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+        language:
+          type: string
+
+    FileWrite:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+
+    ReadFileInput:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+
+    WriteFileInput:
+      type: object
+      required: [path, content]
+      properties:
+        path:
+          type: string
+        content:
+          type: string
+
+    FileDiff:
+      type: object
+      required: [path, status, additions, deletions]
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+          enum: [added, modified, deleted, renamed]
+        diff:
+          type: ["string", "null"]
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        oldPath:
+          type: ["string", "null"]
+
+    Branch:
+      type: object
+      required: [name, current]
+      properties:
+        name:
+          type: string
+        current:
+          type: boolean
+        lastCommit:
+          type: ["string", "null"]
+
+    BranchSwitch:
+      type: object
+      required: [branch]
+      properties:
+        branch:
+          type: string
+
+    Message:
+      type: object
+      required: [id, workspaceId, role, content, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        fileChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileChange"
+        createdAt:
+          type: string
+
+    MessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+
+    FileChange:
+      type: object
+      required: [path, action]
+      properties:
+        path:
+          type: string
+        content:
+          type: ["string", "null"]
+        action:
+          type: string
+          enum: [create, modify, delete]
+
+    AiResponse:
+      type: object
+      required: [message, fileChanges]
+      properties:
+        message:
+          $ref: "#/components/schemas/Message"
+        fileChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileChange"
+
+    CommitInput:
+      type: object
+      properties:
+        message:
+          type: ["string", "null"]
+
+    CommitResult:
+      type: object
+      required: [sha, message, branch, filesChanged]
+      properties:
+        sha:
+          type: string
+        message:
+          type: string
+        branch:
+          type: string
+        filesChanged:
+          type: integer

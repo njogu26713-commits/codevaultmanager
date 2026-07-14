@@ -329,6 +329,11 @@ export async function customFetch<T = unknown>(
   input = applyBaseUrl(input);
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
+  // Always send session cookies for web apps
+  if (!init.credentials) {
+    init.credentials = "include";
+  }
+
   const method = resolveMethod(input, init.method);
 
   if (init.body != null && (method === "GET" || method === "HEAD")) {

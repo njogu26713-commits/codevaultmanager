@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "CodeVault"
+version = "1.0.0"
+id = "artifacts/codevault"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21609
+
+[services.development]
+run = "pnpm --filter @workspace/codevault run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/codevault", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/codevault/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21609"
+BASE_PATH = "/"

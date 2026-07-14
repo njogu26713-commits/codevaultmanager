@@ -1,0 +1,16 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "git"]
+cmds = ["npm install -g pnpm@10"]
+
+[phases.install]
+cmds = ["pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = [
+  "pnpm --filter @workspace/api-spec run codegen",
+  "pnpm --filter @workspace/codevault run build",
+  "pnpm --filter @workspace/api-server run build",
+]
+
+[start]
+cmd = "node artifacts/api-server/dist/index.mjs"

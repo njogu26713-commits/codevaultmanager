@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { Workspace } from "../lib/db";
-import { getFileTree, readFile, writeFile, detectLanguage } from "../lib/workspace-manager";
+import { getFileTree, readFile, writeFile, detectLanguage, ensureWorkspaceDir } from "../lib/workspace-manager";
 
 const router: IRouter = Router();
 
@@ -26,6 +26,7 @@ router.get("/workspaces/:workspaceId/files", requireAuth, async (req, res): Prom
   const workspace = await getOwnedWorkspace(user.id, req.params.workspaceId);
   if (!workspace) { res.status(404).json({ error: "Workspace not found" }); return; }
 
+  await ensureWorkspaceDir(workspace._id, workspace.name, workspace.type, workspace.template ?? null);
   const tree = await getFileTree(workspace._id);
   res.json(tree);
 });

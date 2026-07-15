@@ -207,7 +207,12 @@ async function buildFileTree(dirPath: string, relativePath: string = ""): Promis
 
 export async function getFileTree(workspaceId: string): Promise<FileNode[]> {
   const dir = getWorkspaceDir(workspaceId);
-  return buildFileTree(dir);
+  try {
+    return await buildFileTree(dir);
+  } catch (err: any) {
+    if (err.code === "ENOENT") return [];
+    throw err;
+  }
 }
 
 export async function getFileTreeAsString(workspaceId: string): Promise<string> {
@@ -221,6 +226,23 @@ export async function getFileTreeAsString(workspaceId: string): Promise<string> 
   }
   walk(tree, 0);
   return lines.join("\n");
+}
+
+// Recreate a workspace dir on disk if /tmp was wiped between server restarts
+export async function ensureWorkspaceDir(
+  workspaceId: string,
+  name: string,
+  type: "blank" | "template",
+  template: string | null,
+): Promise<void> {
+  const dir = getWorkspaceDir(workspaceId);
+  try {
+    await fs.access(dir);
+    // Dir exists — nothing to do
+  } catch {
+    logger.warn({ workspaceId }, "Workspace dir missing — recreating");
+    await createProject(workspaceId, name, type as "blank" | "template", template);
+  }
 }
 
 // ---------------------------------------------------------------------------

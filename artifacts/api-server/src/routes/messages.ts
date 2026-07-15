@@ -6,6 +6,7 @@ import {
   readFile,
   writeFile,
   getFileTreeAsString,
+  ensureWorkspaceDir,
 } from "../lib/workspace-manager";
 import { generateCodeChanges } from "../lib/groq-client";
 import { logger } from "../lib/logger";
@@ -83,7 +84,10 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
     });
     send("user_message", { message: serializeMessage(userMsg) });
 
-    // 2. Read file tree
+    // 2. Ensure workspace dir exists (recreate if /tmp was wiped)
+    await ensureWorkspaceDir(workspace._id, workspace.name, workspace.type, workspace.template ?? null);
+
+    // 3. Read file tree
     step("Reading project file tree…", "folder");
     const [fileTree, fileNodes] = await Promise.all([
       getFileTreeAsString(workspace._id),

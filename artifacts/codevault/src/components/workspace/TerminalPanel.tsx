@@ -115,6 +115,59 @@ export function TerminalPanel({ workspaceId, onFilesChanged }: TerminalPanelProp
     }
   };
 
+  // Build a smart, targeted fix prompt based on the error type
+  const buildFixPrompt = async (errorText: string): Promise<string> => {
+    // Detect npm ETARGET — package version doesn't exist
+    const etargetMatch = errorText.match(/No matching version found for ([^\s@]+@[^\s]+)/);
+    const badPackage = etargetMatch ? etargetMatch[1] : null;
+    const pkgName = badPackage ? badPackage.split("@")[0] : null;
+
+    // Fetch package.json if relevant
+    let pkgJsonContent = "";
+    if (errorText.includes("npm error")) {
+      try {
+        const r = await fetch(`/api/workspaces/${workspaceId}/files/read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ path: "package.json" }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          pkgJsonContent = data.content ?? "";
+        }
+      } catch {}
+    }
+
+    if (badPackage && pkgName) {
+      return [
+        `Running npm install failed because the package "${badPackage}" does not exist on npm at all — it is not a real package.`,
+        "",
+        pkgJsonContent ? `Current package.json:\n\`\`\`json\n${pkgJsonContent}\n\`\`\`` : "",
+        "",
+        `Fix instructions:`,
+        `- Remove "${pkgName}" from package.json completely.`,
+        `- If UI components are needed, use only real packages that exist on npm such as: lucide-react, clsx, tailwindcss. Do NOT use shadcn/ui as an npm package — it is not distributed via npm.`,
+        `- Keep all other dependencies that are real npm packages.`,
+        `- Do not change any version to another non-existent version.`,
+        `- Only modify package.json.`,
+      ].filter(Boolean).join("\n");
+    }
+
+    if (errorText.includes("npm error")) {
+      return [
+        `npm install failed with this error:\n\n${errorText}`,
+        "",
+        pkgJsonContent ? `Current package.json:\n\`\`\`json\n${pkgJsonContent}\n\`\`\`` : "",
+        "",
+        `Fix the package.json so that all listed packages are real packages that exist on npm with valid version ranges. Remove or replace any that do not exist.`,
+      ].filter(Boolean).join("\n");
+    }
+
+    // Generic runtime error
+    return `The code failed with this error:\n\n${errorText}\n\nPlease fix the code so it runs without errors.`;
+  };
+
   // Fix with AI — streams the messages SSE endpoint, shows steps inline
   const handleFix = async () => {
     abortRef.current?.abort();
@@ -122,18 +175,17 @@ export function TerminalPanel({ workspaceId, onFilesChanged }: TerminalPanelProp
     abortRef.current = ac;
     setMode("fixing");
 
-    // Collect the recent error output to send to AI
     const errorText = lines
       .filter((l) => l.kind === "stderr" || l.kind === "stdout")
       .map((l) => l.text)
       .join("")
       .trim()
-      .slice(0, 4000); // cap to avoid huge prompts
+      .slice(0, 4000);
 
     append("divider", "");
     append("info", "🤖 Asking AI to fix the error…\n");
 
-    const prompt = `The code failed with this error output:\n\n${errorText}\n\nPlease fix the error.`;
+    const prompt = await buildFixPrompt(errorText);
 
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/messages`, {

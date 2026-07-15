@@ -220,7 +220,11 @@ export default function Workspace() {
             <EditorPanel workspaceId={id} selectedPath={selectedPath} />
           )}
           {mobileTab === "run" && (
-            <TerminalPanel workspaceId={id} />
+            <TerminalPanel workspaceId={id} onFilesChanged={() => {
+              queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(id) })
+              queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(id) })
+              queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(id) })
+            }} />
           )}
           {mobileTab === "chat" && (
             <ChatPanel workspaceId={id} />
@@ -315,7 +319,11 @@ export default function Workspace() {
                   <DiffViewer workspaceId={id} />
                 )}
                 {centerTab === "run" && (
-                  <TerminalPanel workspaceId={id} />
+                  <TerminalPanel workspaceId={id} onFilesChanged={() => {
+                    queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(id) })
+                    queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(id) })
+                    queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(id) })
+                  }} />
                 )}
               </div>
             </div>

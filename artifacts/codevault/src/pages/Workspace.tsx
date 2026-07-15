@@ -16,11 +16,12 @@ import { FileTree } from "@/components/workspace/FileTree"
 import { EditorPanel } from "@/components/workspace/EditorPanel"
 import { DiffViewer } from "@/components/workspace/DiffViewer"
 import { ChatPanel } from "@/components/workspace/ChatPanel"
+import { TerminalPanel } from "@/components/workspace/TerminalPanel"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Code2, ArrowLeft, GitCommit, FolderOpen, Bot, GitPullRequest, FileCode } from "lucide-react"
+import { Code2, ArrowLeft, GitCommit, FolderOpen, Bot, GitPullRequest, FileCode, Play } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
@@ -40,7 +41,8 @@ function useIsMobile() {
   return isMobile
 }
 
-type MobileTab = "files" | "editor" | "chat" | "diff"
+type MobileTab = "files" | "editor" | "chat" | "diff" | "run"
+type CenterTab = "editor" | "diff" | "run"
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -79,7 +81,7 @@ export default function Workspace() {
   const closeWorkspace = useCloseWorkspace()
 
   const [selectedPath, setSelectedPath] = React.useState<string>("")
-  const [activeEditorTab, setActiveEditorTab] = React.useState<"editor" | "diff">("editor")
+  const [centerTab, setCenterTab] = React.useState<CenterTab>("editor")
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("files")
   const [isCommitDialogOpen, setIsCommitDialogOpen] = React.useState(false)
   const [commitMessage, setCommitMessage] = React.useState("")
@@ -196,6 +198,7 @@ export default function Workspace() {
     const mobileTabs: Array<{ id: MobileTab; label: string; icon: React.ReactNode }> = [
       { id: "files",  label: "Files",  icon: <FolderOpen className="w-5 h-5" /> },
       { id: "editor", label: "Editor", icon: <FileCode className="w-5 h-5" /> },
+      { id: "run",    label: "Run",    icon: <Play className="w-5 h-5" /> },
       { id: "chat",   label: "AI",     icon: <Bot className="w-5 h-5" /> },
       { id: "diff",   label: "Diff",   icon: <GitPullRequest className="w-5 h-5" /> },
     ]
@@ -215,6 +218,9 @@ export default function Workspace() {
           )}
           {mobileTab === "editor" && (
             <EditorPanel workspaceId={id} selectedPath={selectedPath} />
+          )}
+          {mobileTab === "run" && (
+            <TerminalPanel workspaceId={id} />
           )}
           {mobileTab === "chat" && (
             <ChatPanel workspaceId={id} />
@@ -258,6 +264,12 @@ export default function Workspace() {
   // ---------------------------------------------------------------------------
   // Desktop layout — resizable panels
   // ---------------------------------------------------------------------------
+  const centerTabs: Array<{ id: CenterTab; label: string }> = [
+    { id: "editor", label: "Editor" },
+    { id: "diff",   label: "Changes" },
+    { id: "run",    label: "▶ Run" },
+  ]
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {header}
@@ -275,31 +287,35 @@ export default function Workspace() {
 
           <PanelResizeHandle className="w-px bg-border hover:bg-primary/50 transition-colors" />
 
-          {/* Centre — Editor / Diff */}
+          {/* Centre — Editor / Diff / Run */}
           <Panel defaultSize={52} minSize={30}>
             <div className="flex flex-col h-full">
               {/* Tab switcher */}
               <div className="flex border-b bg-muted/20 shrink-0">
-                {(["editor", "diff"] as const).map((tab) => (
+                {centerTabs.map((tab) => (
                   <button
-                    key={tab}
-                    onClick={() => setActiveEditorTab(tab)}
+                    key={tab.id}
+                    onClick={() => setCenterTab(tab.id)}
                     className={cn(
-                      "px-4 py-2 text-xs font-medium capitalize transition-colors",
-                      activeEditorTab === tab
+                      "px-4 py-2 text-xs font-medium transition-colors",
+                      centerTab === tab.id
                         ? "border-b-2 border-primary text-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {tab === "editor" ? "Editor" : "Changes"}
+                    {tab.label}
                   </button>
                 ))}
               </div>
               <div className="flex-1 overflow-hidden">
-                {activeEditorTab === "editor" ? (
+                {centerTab === "editor" && (
                   <EditorPanel workspaceId={id} selectedPath={selectedPath} />
-                ) : (
+                )}
+                {centerTab === "diff" && (
                   <DiffViewer workspaceId={id} />
+                )}
+                {centerTab === "run" && (
+                  <TerminalPanel workspaceId={id} />
                 )}
               </div>
             </div>

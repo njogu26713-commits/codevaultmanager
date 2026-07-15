@@ -309,15 +309,20 @@ export default function Repos() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="border border-dashed rounded-2xl p-10 text-center space-y-3">
+          <div className="border border-dashed rounded-2xl p-10 text-center space-y-4">
             <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/40" />
-            <p className="font-medium text-muted-foreground">
-              {search ? "No matching projects" : "No projects yet"}
-            </p>
-            {!search && (
-              <p className="text-sm text-muted-foreground">
-                Create your first project to start building with AI.
+            <div className="space-y-1">
+              <p className="font-medium text-muted-foreground">
+                {search ? "No matching projects" : "No projects yet"}
               </p>
+              {!search && (
+                <p className="text-sm text-muted-foreground">
+                  Create your first project to start building with AI.
+                </p>
+              )}
+            </div>
+            {!search && (
+              <NewProjectDialog onCreate={id => setLocation(`/workspace/${id}`)} />
             )}
           </div>
         ) : (

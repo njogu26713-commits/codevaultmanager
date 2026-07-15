@@ -180,11 +180,8 @@ export function TerminalPanel({ workspaceId, onFilesChanged }: TerminalPanelProp
       }
 
       if (fixed) {
-        append("info", "✓ Fix applied — re-running…\n");
+        append("info", "✓ Fix applied — press Run to try again.\n");
         setMode("idle");
-        // Small delay so the user sees the message, then re-run automatically
-        await new Promise((r) => setTimeout(r, 800));
-        await streamEndpoint("run", "running", false);
       } else {
         setMode("idle");
       }

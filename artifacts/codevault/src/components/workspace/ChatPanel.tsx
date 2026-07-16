@@ -107,6 +107,8 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
   const [isPending, setIsPending] = React.useState(false);
   const [phases, setPhases] = React.useState<PhaseState[]>([]);
   const [activePhase, setActivePhase] = React.useState<PhaseName | null>(null);
+  // Map of assistant message id → completed phases shown persistently in chat
+  const [completedPhases, setCompletedPhases] = React.useState<Record<string, PhaseState[]>>({});
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const { data: messages } = useListMessages(workspaceId, {
@@ -202,8 +204,14 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
             );
 
           } else if (event.type === "done") {
-            // Mark all phases done
-            setPhases((prev) => prev.map((p) => ({ ...p, done: true })));
+            // Mark all phases done and persist them under the assistant message id
+            setPhases((prev) => {
+              const finished = prev.map((p) => ({ ...p, done: true }));
+              if (event.message?.id) {
+                setCompletedPhases((cp) => ({ ...cp, [event.message.id]: finished }));
+              }
+              return finished;
+            });
             setActivePhase(null);
 
             if (event.message) {
@@ -225,8 +233,7 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
       );
     } finally {
       setIsPending(false);
-      // Keep phases visible briefly then clear
-      setTimeout(() => setPhases([]), 3500);
+      setPhases([]);
     }
   };
 
@@ -276,6 +283,15 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
               >
                 {msg.content}
               </div>
+
+              {/* Persistent phase cards for this message */}
+              {msg.role === "assistant" && completedPhases[msg.id] && (
+                <div className="w-full max-w-[90%] flex flex-col gap-2 mt-1">
+                  {completedPhases[msg.id].map((phase, i) => (
+                    <PhaseBlock key={phase.name + i} phase={phase} isActive={false} />
+                  ))}
+                </div>
+              )}
 
               {msg.fileChanges && msg.fileChanges.length > 0 && (
                 <div className="w-full max-w-[85%] mt-1">

@@ -17,11 +17,12 @@ import { EditorPanel } from "@/components/workspace/EditorPanel"
 import { DiffViewer } from "@/components/workspace/DiffViewer"
 import { ChatPanel } from "@/components/workspace/ChatPanel"
 import { TerminalPanel } from "@/components/workspace/TerminalPanel"
+import { PreviewPanel } from "@/components/workspace/PreviewPanel"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Code2, ArrowLeft, GitCommit, FolderOpen, Bot, GitPullRequest, FileCode, Play } from "lucide-react"
+import { Code2, ArrowLeft, GitCommit, FolderOpen, Bot, GitPullRequest, FileCode, Play, Monitor } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "@/lib/utils"
@@ -41,8 +42,8 @@ function useIsMobile() {
   return isMobile
 }
 
-type MobileTab = "files" | "editor" | "chat" | "diff" | "run"
-type CenterTab = "editor" | "diff" | "run"
+type MobileTab = "files" | "editor" | "chat" | "diff" | "run" | "preview"
+type CenterTab = "editor" | "diff" | "run" | "preview"
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -83,6 +84,7 @@ export default function Workspace() {
   const [selectedPath, setSelectedPath] = React.useState<string>("")
   const [centerTab, setCenterTab] = React.useState<CenterTab>("editor")
   const [mobileTab, setMobileTab] = React.useState<MobileTab>("files")
+  const [previewRefreshKey, setPreviewRefreshKey] = React.useState(0)
   const [isCommitDialogOpen, setIsCommitDialogOpen] = React.useState(false)
   const [commitMessage, setCommitMessage] = React.useState("")
 
@@ -196,11 +198,12 @@ export default function Workspace() {
   // ---------------------------------------------------------------------------
   if (isMobile) {
     const mobileTabs: Array<{ id: MobileTab; label: string; icon: React.ReactNode }> = [
-      { id: "files",  label: "Files",  icon: <FolderOpen className="w-5 h-5" /> },
-      { id: "editor", label: "Editor", icon: <FileCode className="w-5 h-5" /> },
-      { id: "run",    label: "Run",    icon: <Play className="w-5 h-5" /> },
-      { id: "chat",   label: "AI",     icon: <Bot className="w-5 h-5" /> },
-      { id: "diff",   label: "Diff",   icon: <GitPullRequest className="w-5 h-5" /> },
+      { id: "files",   label: "Files",   icon: <FolderOpen className="w-5 h-5" /> },
+      { id: "editor",  label: "Editor",  icon: <FileCode className="w-5 h-5" /> },
+      { id: "preview", label: "Preview", icon: <Monitor className="w-5 h-5" /> },
+      { id: "run",     label: "Run",     icon: <Play className="w-5 h-5" /> },
+      { id: "chat",    label: "AI",      icon: <Bot className="w-5 h-5" /> },
+      { id: "diff",    label: "Diff",    icon: <GitPullRequest className="w-5 h-5" /> },
     ]
 
     return (
@@ -219,15 +222,19 @@ export default function Workspace() {
           {mobileTab === "editor" && (
             <EditorPanel workspaceId={id} selectedPath={selectedPath} />
           )}
+          {mobileTab === "preview" && (
+            <PreviewPanel workspaceId={id} refreshKey={previewRefreshKey} />
+          )}
           {mobileTab === "run" && (
             <TerminalPanel workspaceId={id} onFilesChanged={() => {
               queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(id) })
               queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(id) })
               queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(id) })
+              setPreviewRefreshKey((k) => k + 1)
             }} />
           )}
           {mobileTab === "chat" && (
-            <ChatPanel workspaceId={id} />
+            <ChatPanel workspaceId={id} onFilesChanged={() => setPreviewRefreshKey((k) => k + 1)} />
           )}
           {mobileTab === "diff" && (
             <DiffViewer workspaceId={id} />
@@ -269,9 +276,10 @@ export default function Workspace() {
   // Desktop layout — resizable panels
   // ---------------------------------------------------------------------------
   const centerTabs: Array<{ id: CenterTab; label: string }> = [
-    { id: "editor", label: "Editor" },
-    { id: "diff",   label: "Changes" },
-    { id: "run",    label: "▶ Run" },
+    { id: "editor",  label: "Editor" },
+    { id: "preview", label: "⬡ Preview" },
+    { id: "diff",    label: "Changes" },
+    { id: "run",     label: "▶ Run" },
   ]
 
   return (
@@ -315,6 +323,9 @@ export default function Workspace() {
                 {centerTab === "editor" && (
                   <EditorPanel workspaceId={id} selectedPath={selectedPath} />
                 )}
+                {centerTab === "preview" && (
+                  <PreviewPanel workspaceId={id} refreshKey={previewRefreshKey} />
+                )}
                 {centerTab === "diff" && (
                   <DiffViewer workspaceId={id} />
                 )}
@@ -323,6 +334,7 @@ export default function Workspace() {
                     queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(id) })
                     queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(id) })
                     queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(id) })
+                    setPreviewRefreshKey((k) => k + 1)
                   }} />
                 )}
               </div>
@@ -333,7 +345,7 @@ export default function Workspace() {
 
           {/* Right — AI Chat */}
           <Panel defaultSize={30} minSize={20} maxSize={40}>
-            <ChatPanel workspaceId={id} />
+            <ChatPanel workspaceId={id} onFilesChanged={() => setPreviewRefreshKey((k) => k + 1)} />
           </Panel>
         </PanelGroup>
       </main>

@@ -29,6 +29,7 @@ interface PhaseState {
 
 interface ChatPanelProps {
   workspaceId: string;
+  onFilesChanged?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +102,7 @@ function PhaseBlock({ phase, isActive }: { phase: PhaseState; isActive: boolean 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export function ChatPanel({ workspaceId }: ChatPanelProps) {
+export function ChatPanel({ workspaceId, onFilesChanged }: ChatPanelProps) {
   const queryClient = useQueryClient();
   const [content, setContent] = React.useState("");
   const [isPending, setIsPending] = React.useState(false);
@@ -223,6 +224,8 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
             queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(workspaceId) });
             queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(workspaceId) });
             queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(workspaceId) });
+            // Auto-refresh preview whenever the AI writes code files
+            if (event.message?.fileChanges?.length > 0) onFilesChanged?.();
           }
         }
       }

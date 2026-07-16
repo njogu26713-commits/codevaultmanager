@@ -1,0 +1,107 @@
+stage-0
+FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+12ms
+unpacking archive
+1 MB
+9ms
+uploading snapshot
+191.2 KB
+using build driver nixpacks-v1.41.0
+ 
+╔══════════════════════════════ Nixpacks v1.41.0 ══════════════════════════════╗
+║ setup      │ nodejs_20, nodePackages_latest.pnpm, git                        ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ install    │ pnpm install --no-frozen-lockfile                               ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ build      │ pnpm install --no-frozen-lockfile && pnpm --filter              ║
+║            │ @workspace/api-spec run codegen && pnpm --filter                ║
+║            │ @workspace/codevault run build && pnpm --filter @workspace/api- ║
+║            │ server run build                                                ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ start      │ node artifacts/api-server/dist/index.mjs                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ 
+ 
+Saved output to:
+  snapshot-target-unpack
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+144ms
+
+internal
+load .dockerignore
+0ms
+UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)(https://docs.docker.com/go/dockerfile/rule/undefined-var/)
+ details: Variables should be defined before their use
+
+internal
+load build context
+0ms
+
+stage-0
+RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d cached
+0ms
+
+stage-0
+COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix cached
+0ms
+
+stage-0
+WORKDIR /app/ cached
+0ms
+
+stage-0
+COPY . /app/.
+214ms
+
+stage-0
+RUN pnpm install --no-frozen-lockfile
+6s
+Done in 4.4s
+
+stage-0
+COPY . /app/.
+537ms
+
+stage-0
+RUN pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-spec run codegen && pnpm --filter @workspace/codevault run build && pnpm --filter @workspace/api-server run build
+10s
+⚡ Done in 171ms
+scheduling build on Metal builder "builder-dzenjf"
+
+stage-0
+RUN printf '\nPATH=/app/node_modules/.bin:$PATH' >> /root/.profile
+218ms
+
+stage-0
+COPY . /app
+191ms
+
+exporting to docker image format
+10s
+containerimage.config.digest: sha256:1971d13da646ea2ba7ca38225fe909b16ecc55de90c1d442d78fdb8754181278
+containerimage.digest: sha256:11b6988a017e2c12de01fcfa71330bddef1233848395d2dddbbd74185fdb9dfe
+containerimage.descriptor: eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLm1hbmlmZXN0LnYxK2pzb24iLCJkaWdlc3QiOiJzaGEyNTY6MTFiNjk4OGEwMTdlMmMxMmRlMDFmY2ZhNzEzMzBiZGRlZjEyMzM4NDgzOTVkMmRkZGJiZDc0MTg1ZmRiOWRmZSIsInNpemUiOjI3NzAsImFubm90YXRpb25zIjp7Im9yZy5vcGVuY29udGFpbmVycy5pbWFnZS5jcmVhdGVkIjoiMjAyNi0wNy0xNlQwNzowOTozM1oifSwicGxhdGZvcm0iOnsiYXJjaGl0ZWN0dXJlIjoiYW1kNjQiLCJvcyI6ImxpbnV4In19
+image push
+509.2 MB
+27.9s
+ 
+====================
+Starting Healthcheck
+====================
+Path: /api/healthz
+Retry window: 30s
+ 
+Attempt #1 failed with service unavailable. Continuing to retry for 27s
+Attempt #2 failed with service unavailable. Continuing to retry for 16s
+Attempt #3 failed with service unavailable. Continuing to retry for 4s
+ 
+1/1 replicas never became healthy!
+
+Healthcheck failed!
+

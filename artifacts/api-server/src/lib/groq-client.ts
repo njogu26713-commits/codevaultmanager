@@ -40,6 +40,9 @@ Always respond with this exact JSON structure:
 }
 
 Rules:
+- ALWAYS produce at least one file change. Never return an empty fileChanges array.
+- If the workspace is empty or only has a README, create the necessary files from scratch to fulfil the request.
+- If the task is ambiguous, make a reasonable interpretation and implement it — do not refuse.
 - For create/modify, always provide the COMPLETE file content (not just the diff)
 - For delete, set content to null
 - Use correct file extensions and proper formatting

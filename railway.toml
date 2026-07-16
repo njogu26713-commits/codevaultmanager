@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @workspace/api-spec run codegen && pnpm --filter @workspace/codevault run build && pnpm --filter @workspace/api-server run build"
+buildCommand = "pnpm --filter @workspace/api-spec run codegen && pnpm --filter @workspace/codevault run build && pnpm --filter @workspace/api-server run build"
 
 [deploy]
 startCommand = "node artifacts/api-server/dist/index.mjs"

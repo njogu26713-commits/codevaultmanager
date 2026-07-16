@@ -1,0 +1,72 @@
+unpacking archive
+1 MB
+10ms
+using build driver nixpacks-v1.41.0
+uploading snapshot
+189.7 KB
+15ms
+ 
+╔══════════════════════════════ Nixpacks v1.41.0 ══════════════════════════════╗
+║ setup      │ nodejs_20, nodePackages_latest.pnpm, git                        ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ install    │ pnpm install --frozen-lockfile                                  ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ build      │ pnpm install --frozen-lockfile && pnpm --filter @workspace/api- ║
+║            │ spec run codegen && pnpm --filter @workspace/codevault run      ║
+║            │ build && pnpm --filter @workspace/api-server run build          ║
+║──────────────────────────────────────────────────────────────────────────────║
+║ start      │ node artifacts/api-server/dist/index.mjs                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+ 
+ 
+Saved output to:
+  snapshot-target-unpack
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+356ms
+
+internal
+load .dockerignore
+0ms
+UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)(https://docs.docker.com/go/dockerfile/rule/undefined-var/)
+ details: Variables should be defined before their use
+
+stage-0
+FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+13ms
+
+internal
+load build context
+0ms
+
+stage-0
+WORKDIR /app/ cached
+0ms
+
+stage-0
+COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix
+160ms
+
+stage-0
+RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d
+30s
+21 store paths deleted, 186.78 MiB freed
+scheduling build on Metal builder "builder-dzenjf"
+
+stage-0
+COPY . /app/.
+332ms
+
+stage-0
+RUN pnpm install --frozen-lockfile
+841ms
+Scope: all 9 workspace projects
+ ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+Update your lockfile using "pnpm install --no-frozen-lockfile"
+
+Build Failed: build daemon returned an error < failed to solve: process "/bin/bash -ol pipefail -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1 >

@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "nodePackages_latest.pnpm", "git"]
+nixPkgs = ["nodejs_20", "git"]
+cmds = ["corepack enable", "corepack prepare pnpm@10.26.1 --activate"]
 
 [phases.install]
 cmds = ["pnpm install --frozen-lockfile"]

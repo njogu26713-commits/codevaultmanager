@@ -136,9 +136,9 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
 
     // ── WORKING ────────────────────────────────────────────────────────────
     phase("working");
-    step("Generating code changes…");
+    step("Generating response…");
 
-    let aiResult: { summary: string; fileChanges: any[] };
+    let aiResult: { type: "code" | "chat"; reply: string; summary: string; fileChanges: any[] };
     try {
       aiResult = await generateCodeChanges(body.data.content, fileTree, contextFiles);
     } catch (err) {
@@ -147,7 +147,7 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
         _id: crypto.randomUUID(),
         workspaceId: workspace._id,
         role: "assistant",
-        content: "Sorry, I encountered an error generating changes. Please try again.",
+        content: "Sorry, I encountered an error. Please try again.",
         fileChanges: null,
       });
       send("done", { message: serializeMessage(errMsg), fileChanges: [] });
@@ -155,21 +155,22 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
       return;
     }
 
-    step(`Planned ${aiResult.fileChanges.length} file change${aiResult.fileChanges.length !== 1 ? "s" : ""}`);
-
-    for (const change of aiResult.fileChanges) {
-      if (change.action === "delete") {
-        step(`Deleting ${change.path}`);
-      } else {
-        step(`${change.action === "create" ? "Creating" : "Updating"} ${change.path}`);
-      }
-      try {
-        if (change.action !== "delete" && change.content != null) {
-          await writeFile(workspace._id, change.path, change.content);
+    if (aiResult.type === "code") {
+      step(`Planned ${aiResult.fileChanges.length} file change${aiResult.fileChanges.length !== 1 ? "s" : ""}`);
+      for (const change of aiResult.fileChanges) {
+        if (change.action === "delete") {
+          step(`Deleting ${change.path}`);
+        } else {
+          step(`${change.action === "create" ? "Creating" : "Updating"} ${change.path}`);
         }
-      } catch (err) {
-        logger.warn({ err, path: change.path }, "Failed to apply file change");
-        step(`⚠ Could not write ${change.path}`);
+        try {
+          if (change.action !== "delete" && change.content != null) {
+            await writeFile(workspace._id, change.path, change.content);
+          }
+        } catch (err) {
+          logger.warn({ err, path: change.path }, "Failed to apply file change");
+          step(`⚠ Could not write ${change.path}`);
+        }
       }
     }
 
@@ -181,8 +182,8 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
       _id: crypto.randomUUID(),
       workspaceId: workspace._id,
       role: "assistant",
-      content: aiResult.summary,
-      fileChanges: aiResult.fileChanges,
+      content: aiResult.reply,
+      fileChanges: aiResult.type === "code" ? aiResult.fileChanges : null,
     });
 
     step("Done");

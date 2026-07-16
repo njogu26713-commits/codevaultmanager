@@ -16,43 +16,54 @@ export interface FileChange {
 }
 
 export interface AiCodeResult {
-  summary: string;
+  type: "code" | "chat";
+  reply: string;       // conversational answer (always present)
+  summary: string;     // one-liner shown in chat bubble for code responses
   fileChanges: FileChange[];
 }
 
-const THINKING_PROMPT = `You are a senior software engineer. A developer has given you a coding task.
-Briefly describe your plan in 2–3 sentences — what you will create or change and why.
-Be direct and technical. Do not write code yet, just your plan.`;
+const THINKING_PROMPT = `You are a senior software engineer and developer mentor.
+A developer has sent you a message — it might be a coding task OR a question about code, architecture, or development.
 
-const SYSTEM_PROMPT = `You are CodeVault, an expert AI software engineer embedded in a developer tool. You help users build, refactor, and improve their codebases.
+If it is a question or discussion: briefly describe how you will answer it (1–2 sentences).
+If it is a coding task: briefly describe your implementation plan (2–3 sentences).
+Be direct and technical. Do not write code yet, just your thinking.`;
 
-When given a task:
-1. Analyze the repository structure and relevant files
-2. Determine the minimal, correct set of file changes needed
-3. Return ONLY valid JSON — no markdown, no explanation outside the JSON
+const SYSTEM_PROMPT = `You are CodeVault, an expert AI software engineer and developer mentor embedded in a code editor. You work like a senior developer on the team — you write code AND answer questions, explain decisions, discuss trade-offs, and teach.
 
-Always respond with this exact JSON structure:
+You receive messages from a developer. They may be:
+- A coding task ("add a login page", "refactor this function")
+- A question about the code ("why did you use X?", "what does this file do?", "what is Y for?")
+- A general dev question ("what's the difference between X and Y?", "how should I structure this?")
+- A mix of both
+
+Decide which type it is and respond accordingly.
+
+Always return ONLY valid JSON in this exact structure — no markdown, no text outside the JSON:
 {
-  "summary": "One sentence describing what was done",
-  "fileChanges": [
-    {
-      "path": "relative/path/to/file.ext",
-      "action": "create" | "modify" | "delete",
-      "content": "complete file content as a string (null for delete)"
-    }
-  ]
+  "type": "chat" | "code",
+  "reply": "Your full conversational response. For chat: a thorough, friendly developer explanation. For code: a brief summary of what you did.",
+  "summary": "One sentence shown as the chat bubble (same as reply for chat, brief for code)",
+  "fileChanges": []
 }
 
-Rules:
-- ALWAYS produce at least one file change. Never return an empty fileChanges array.
-- If the workspace is empty or only has a README, create the necessary files from scratch to fulfil the request.
-- If the task is ambiguous, make a reasonable interpretation and implement it — do not refuse.
-- For create/modify, always provide the COMPLETE file content (not just the diff)
-- For delete, set content to null
-- Use correct file extensions and proper formatting
-- Respect the existing code architecture and style
-- Prefer minimal, focused changes over large rewrites
-- Never include binary files or lock files in fileChanges`;
+When type is "chat" (questions, explanations, discussion):
+- reply must be a thorough, friendly answer a senior developer would give
+- Explain the why, the trade-offs, the alternatives where relevant
+- You can reference the user's files if helpful
+- fileChanges must be an empty array []
+
+When type is "code" (implementation tasks):
+- reply is a short explanation of what you did and why
+- summary is one sentence describing the change
+- fileChanges contains all file changes
+- ALWAYS produce at least one file change for code tasks
+- If the workspace is empty or only has a README, create the necessary files from scratch
+- For create/modify: provide the COMPLETE file content
+- For delete: set content to null
+- Never include binary files or lock files in fileChanges
+- Respect existing architecture and style; prefer focused changes over rewrites`;
+
 
 /**
  * Streams the AI's thinking/reasoning as text chunks.
@@ -123,14 +134,16 @@ Task: ${prompt}`;
     const content = response.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(content) as Partial<AiCodeResult>;
 
-    return {
-      summary: parsed.summary ?? "Changes applied",
-      fileChanges: (parsed.fileChanges ?? []).map((fc) => ({
-        path: fc.path ?? "",
-        content: fc.content ?? null,
-        action: (fc.action as "create" | "modify" | "delete") ?? "modify",
-      })),
-    };
+    const type = parsed.type === "chat" ? "chat" : "code";
+    const reply = parsed.reply ?? parsed.summary ?? "Done";
+    const summary = parsed.summary ?? reply;
+    const fileChanges = (parsed.fileChanges ?? []).map((fc) => ({
+      path: fc.path ?? "",
+      content: fc.content ?? null,
+      action: (fc.action as "create" | "modify" | "delete") ?? "modify",
+    }));
+
+    return { type, reply, summary, fileChanges };
   } catch (err) {
     logger.error({ err }, "Groq API error");
     throw new Error("AI code generation failed");

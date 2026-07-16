@@ -79,6 +79,29 @@ const MessageSchema = new Schema<IMessage>(
 export const Message = mongoose.model<IMessage>("Message", MessageSchema);
 
 // ---------------------------------------------------------------------------
+// WorkspaceFile — persists file contents across server restarts
+// ---------------------------------------------------------------------------
+export interface IWorkspaceFile extends Document {
+  workspaceId: string;
+  path: string;
+  content: string;
+  updatedAt: Date;
+}
+
+const WorkspaceFileSchema = new Schema<IWorkspaceFile>(
+  {
+    workspaceId: { type: String, required: true, index: true },
+    path: { type: String, required: true },
+    content: { type: String, required: true, default: "" },
+  },
+  { timestamps: true },
+);
+
+WorkspaceFileSchema.index({ workspaceId: 1, path: 1 }, { unique: true });
+
+export const WorkspaceFile = mongoose.model<IWorkspaceFile>("WorkspaceFile", WorkspaceFileSchema);
+
+// ---------------------------------------------------------------------------
 // Connection
 // ---------------------------------------------------------------------------
 export async function connectDB(): Promise<void> {

@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "./logger";
+import { WorkspaceFile } from "./db";
 
 const WORKSPACE_BASE =
   process.env.WORKSPACE_DIR ?? "/tmp/codevault-workspaces";
@@ -130,18 +131,29 @@ export async function createProject(
   const dir = getWorkspaceDir(workspaceId);
   await fs.mkdir(dir, { recursive: true });
 
-  if (type === "blank") {
-    await fs.writeFile(path.join(dir, "README.md"), `# ${name}\n`);
-  } else if (type === "template" && template && TEMPLATES[template]) {
-    const files = TEMPLATES[template];
-    for (const [filePath, content] of Object.entries(files)) {
-      const fullPath = path.join(dir, filePath);
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content);
-    }
-  } else {
-    await fs.writeFile(path.join(dir, "README.md"), `# ${name}\n`);
+  // Determine initial files
+  const initialFiles: Record<string, string> =
+    type === "template" && template && TEMPLATES[template]
+      ? TEMPLATES[template]
+      : { "README.md": `# ${name}\n` };
+
+  // Write to disk
+  for (const [filePath, content] of Object.entries(initialFiles)) {
+    const fullPath = path.join(dir, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content);
   }
+
+  // Persist to MongoDB (source of truth)
+  await Promise.all(
+    Object.entries(initialFiles).map(([filePath, content]) =>
+      WorkspaceFile.findOneAndUpdate(
+        { workspaceId, path: filePath },
+        { workspaceId, path: filePath, content },
+        { upsert: true, new: true },
+      ),
+    ),
+  );
 
   await initGit(dir, name);
   logger.info({ workspaceId, type, template }, "Project created");
@@ -228,7 +240,8 @@ export async function getFileTreeAsString(workspaceId: string): Promise<string> 
   return lines.join("\n");
 }
 
-// Recreate a workspace dir on disk if /tmp was wiped between server restarts
+// Recreate a workspace dir on disk if /tmp was wiped between server restarts.
+// Restores files from MongoDB (source of truth) rather than re-running the template.
 export async function ensureWorkspaceDir(
   workspaceId: string,
   name: string,
@@ -236,12 +249,38 @@ export async function ensureWorkspaceDir(
   template: string | null,
 ): Promise<void> {
   const dir = getWorkspaceDir(workspaceId);
+  let dirExists = false;
   try {
     await fs.access(dir);
-    // Dir exists — nothing to do
+    dirExists = true;
   } catch {
-    logger.warn({ workspaceId }, "Workspace dir missing — recreating");
-    await createProject(workspaceId, name, type as "blank" | "template", template);
+    // dir missing — will restore below
+  }
+
+  if (!dirExists) {
+    logger.warn({ workspaceId }, "Workspace dir missing — restoring from MongoDB");
+    const savedFiles = await WorkspaceFile.find({ workspaceId });
+
+    if (savedFiles.length > 0) {
+      // Restore from MongoDB
+      await fs.mkdir(dir, { recursive: true });
+      for (const file of savedFiles) {
+        const fullPath = path.join(dir, file.path);
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, file.content, "utf-8");
+      }
+      // Re-init git so diff/commit features work
+      try {
+        await initGit(dir, name);
+      } catch {
+        // git already initialized or no commits — not fatal
+      }
+      logger.info({ workspaceId, fileCount: savedFiles.length }, "Workspace restored from MongoDB");
+    } else {
+      // No saved files yet — fresh project
+      logger.warn({ workspaceId }, "No saved files in MongoDB — creating fresh project");
+      await createProject(workspaceId, name, type as "blank" | "template", template);
+    }
   }
 }
 
@@ -259,6 +298,13 @@ export async function writeFile(workspaceId: string, filePath: string, content: 
   const dir = getWorkspaceDir(workspaceId);
   const fullPath = path.resolve(dir, filePath);
   if (!fullPath.startsWith(dir)) throw new Error("Path traversal detected");
+  // Persist to MongoDB first (source of truth)
+  await WorkspaceFile.findOneAndUpdate(
+    { workspaceId, path: filePath },
+    { workspaceId, path: filePath, content },
+    { upsert: true, new: true },
+  );
+  // Also write to disk for git and in-process reads
   await fs.mkdir(path.dirname(fullPath), { recursive: true });
   await fs.writeFile(fullPath, content, "utf-8");
 }
@@ -351,5 +397,8 @@ export async function getWorkspaceStats(workspaceId: string) {
 
 export async function deleteWorkspaceDir(workspaceId: string): Promise<void> {
   const dir = getWorkspaceDir(workspaceId);
-  await fs.rm(dir, { recursive: true, force: true });
+  await Promise.all([
+    fs.rm(dir, { recursive: true, force: true }),
+    WorkspaceFile.deleteMany({ workspaceId }),
+  ]);
 }

@@ -4,9 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  Send, Bot, Code2,
-  Save, FolderOpen, FileText, Sparkles, Trash2,
-  AlertTriangle, CheckCircle2, ChevronRight, Loader2,
+  Send, Bot, Code2, Brain, Wrench, Zap, CheckCircle2, Loader2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,9 +18,12 @@ import { cn } from "@/lib/utils";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-interface Step {
-  text: string;
-  icon: string;
+type PhaseName = "preparing" | "thinking" | "working" | "finalizing";
+
+interface PhaseState {
+  name: PhaseName;
+  steps: string[];
+  thinking: string; // live-streamed AI reasoning (only for "thinking" phase)
   done: boolean;
 }
 
@@ -31,23 +32,70 @@ interface ChatPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Icon map for step icons
+// Phase config
 // ---------------------------------------------------------------------------
-function StepIcon({ icon, spinning }: { icon: string; spinning?: boolean }) {
-  const cls = cn("w-3.5 h-3.5 shrink-0", spinning && "animate-spin");
-  switch (icon) {
-    case "save":    return <Save className={cls} />;
-    case "folder":  return <FolderOpen className={cls} />;
-    case "file":    return <FileText className={cls} />;
-    case "bot":     return <Bot className={cls} />;
-    case "sparkle": return <Sparkles className={cls} />;
-    case "write":   return <FileText className={cls} />;
-    case "trash":   return <Trash2 className={cls} />;
-    case "check":   return <CheckCircle2 className={cn(cls, "text-green-500")} />;
-    case "error":   return <AlertTriangle className={cn(cls, "text-red-500")} />;
-    case "warn":    return <AlertTriangle className={cn(cls, "text-yellow-500")} />;
-    default:        return <ChevronRight className={cls} />;
-  }
+const PHASE_CONFIG: Record<PhaseName, { label: string; Icon: React.ElementType; color: string }> = {
+  preparing:  { label: "Preparing",  Icon: Zap,    color: "text-yellow-500" },
+  thinking:   { label: "Thinking",   Icon: Brain,  color: "text-purple-500" },
+  working:    { label: "Working",    Icon: Wrench, color: "text-blue-500"   },
+  finalizing: { label: "Finalizing", Icon: CheckCircle2, color: "text-green-500" },
+};
+
+// ---------------------------------------------------------------------------
+// PhaseBlock — renders one phase card
+// ---------------------------------------------------------------------------
+function PhaseBlock({ phase, isActive }: { phase: PhaseState; isActive: boolean }) {
+  const cfg = PHASE_CONFIG[phase.name];
+  const Icon = cfg.Icon;
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card shadow-sm overflow-hidden transition-all",
+        isActive ? "border-primary/30" : "border-border/50 opacity-70",
+      )}
+    >
+      {/* Phase header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
+        {isActive && !phase.done ? (
+          <Loader2 className={cn("w-3.5 h-3.5 animate-spin shrink-0", cfg.color)} />
+        ) : (
+          <Icon className={cn("w-3.5 h-3.5 shrink-0", phase.done ? "text-green-500" : cfg.color)} />
+        )}
+        <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
+          {cfg.label}
+        </span>
+      </div>
+
+      <div className="px-3 py-2 space-y-1.5">
+        {/* Streamed thinking text */}
+        {phase.name === "thinking" && phase.thinking && (
+          <p className="text-xs text-foreground/80 leading-relaxed italic">
+            {phase.thinking}
+            {isActive && !phase.done && (
+              <span className="inline-block w-1 h-3.5 ml-0.5 bg-primary align-middle animate-pulse rounded-sm" />
+            )}
+          </p>
+        )}
+
+        {/* Steps */}
+        {phase.steps.map((s, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+            <span className="w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+            {s}
+          </div>
+        ))}
+
+        {/* Spinner placeholder while active phase has no content yet */}
+        {isActive && !phase.done && phase.steps.length === 0 && !phase.thinking && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Starting…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -57,28 +105,30 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
   const queryClient = useQueryClient();
   const [content, setContent] = React.useState("");
   const [isPending, setIsPending] = React.useState(false);
-  const [steps, setSteps] = React.useState<Step[]>([]);
+  const [phases, setPhases] = React.useState<PhaseState[]>([]);
+  const [activePhase, setActivePhase] = React.useState<PhaseName | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const { data: messages } = useListMessages(workspaceId, {
     query: { enabled: !!workspaceId, queryKey: getListMessagesQueryKey(workspaceId) },
   });
 
-  // Auto-scroll on new messages or steps
+  // Auto-scroll
   React.useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, steps, isPending]);
+  }, [messages, phases, isPending]);
 
   const handleSend = async () => {
     if (!content.trim() || isPending) return;
     const prompt = content.trim();
     setContent("");
     setIsPending(true);
-    setSteps([]);
+    setPhases([]);
+    setActivePhase(null);
 
-    // Optimistically add the user message to the cache so it appears instantly
+    // Optimistic user message
     const tempId = crypto.randomUUID();
     queryClient.setQueryData(getListMessagesQueryKey(workspaceId), (old: any[] = []) => [
       ...old,
@@ -101,9 +151,7 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
         body: JSON.stringify({ content: prompt }),
       });
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -114,41 +162,56 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // SSE lines: "data: {...}\n\n"
         const parts = buffer.split("\n\n");
         buffer = parts.pop() ?? "";
 
         for (const part of parts) {
           const line = part.trim();
           if (!line.startsWith("data:")) continue;
-          const json = line.slice(5).trim();
           let event: any;
-          try { event = JSON.parse(json); } catch { continue; }
+          try { event = JSON.parse(line.slice(5).trim()); } catch { continue; }
 
-          if (event.type === "step") {
-            setSteps((prev) => {
-              // Mark all previous steps done, add new active one
-              return [
-                ...prev.map((s) => ({ ...s, done: true })),
-                { text: event.text, icon: event.icon ?? "arrow", done: false },
-              ];
+          if (event.type === "phase") {
+            const name = event.name as PhaseName;
+            setActivePhase(name);
+            setPhases((prev) => [
+              // mark previous phase done
+              ...prev.map((p) => ({ ...p, done: true })),
+              { name, steps: [], thinking: "", done: false },
+            ]);
+
+          } else if (event.type === "thinking_chunk") {
+            setPhases((prev) => {
+              if (prev.length === 0) return prev;
+              const last = { ...prev[prev.length - 1] };
+              last.thinking += event.text;
+              return [...prev.slice(0, -1), last];
             });
+
+          } else if (event.type === "step") {
+            setPhases((prev) => {
+              if (prev.length === 0) return prev;
+              const last = { ...prev[prev.length - 1] };
+              last.steps = [...last.steps, event.text];
+              return [...prev.slice(0, -1), last];
+            });
+
           } else if (event.type === "user_message") {
-            // Replace optimistic message with server-confirmed one
             queryClient.setQueryData(getListMessagesQueryKey(workspaceId), (old: any[] = []) =>
               old.map((m) => (m.id === tempId ? event.message : m))
             );
+
           } else if (event.type === "done") {
-            // Mark all steps done
-            setSteps((prev) => prev.map((s) => ({ ...s, done: true })));
-            // Add assistant message to cache
+            // Mark all phases done
+            setPhases((prev) => prev.map((p) => ({ ...p, done: true })));
+            setActivePhase(null);
+
             if (event.message) {
               queryClient.setQueryData(getListMessagesQueryKey(workspaceId), (old: any[] = []) => [
                 ...old.filter((m) => m.id !== tempId),
                 event.message,
               ]);
             }
-            // Refresh file tree, diffs, stats
             queryClient.invalidateQueries({ queryKey: getListFilesQueryKey(workspaceId) });
             queryClient.invalidateQueries({ queryKey: getGetDiffQueryKey(workspaceId) });
             queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey(workspaceId) });
@@ -157,18 +220,13 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
       }
     } catch (err) {
       console.error("SSE error", err);
-      setSteps((prev) => [
-        ...prev.map((s) => ({ ...s, done: true })),
-        { text: "Connection error — please try again.", icon: "error", done: true },
-      ]);
-      // Remove optimistic message on error
       queryClient.setQueryData(getListMessagesQueryKey(workspaceId), (old: any[] = []) =>
         old.filter((m) => m.id !== tempId)
       );
     } finally {
       setIsPending(false);
-      // Clear steps after a short delay so user can see "Done!"
-      setTimeout(() => setSteps([]), 2500);
+      // Keep phases visible briefly then clear
+      setTimeout(() => setPhases([]), 3500);
     }
   };
 
@@ -189,6 +247,7 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
 
       <ScrollArea className="flex-1 p-4" viewportRef={scrollRef}>
         <div className="space-y-6 pb-4">
+
           {/* Empty state */}
           {messages?.length === 0 && !isPending && (
             <div className="text-center mt-10 space-y-3">
@@ -251,34 +310,23 @@ export function ChatPanel({ workspaceId }: ChatPanelProps) {
             </div>
           ))}
 
-          {/* Live step log — shown while AI is working */}
-          {isPending && steps.length > 0 && (
-            <div className="flex flex-col items-start gap-1.5">
-              <div className="bg-card border rounded-2xl rounded-tl-sm shadow-sm px-4 py-3 w-full max-w-[90%] space-y-1.5">
-                {steps.map((s, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex items-center gap-2 text-xs font-mono transition-opacity",
-                      s.done ? "text-muted-foreground" : "text-foreground",
-                    )}
-                  >
-                    {s.done ? (
-                      <StepIcon icon={s.icon} />
-                    ) : (
-                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-primary" />
-                    )}
-                    <span>{s.text}</span>
-                  </div>
-                ))}
-              </div>
+          {/* Live phase cards while AI is working */}
+          {isPending && phases.length > 0 && (
+            <div className="flex flex-col items-start gap-2 w-full max-w-[90%]">
+              {phases.map((phase, i) => (
+                <PhaseBlock
+                  key={phase.name + i}
+                  phase={phase}
+                  isActive={activePhase === phase.name}
+                />
+              ))}
             </div>
           )}
 
-          {/* Initial dots while first step hasn't arrived yet */}
-          {isPending && steps.length === 0 && (
+          {/* Initial dots before first phase arrives */}
+          {isPending && phases.length === 0 && (
             <div className="flex flex-col items-start gap-2">
-              <div className="bg-card border shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 text-sm flex items-center gap-2">
+              <div className="bg-card border shadow-sm rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: "0ms" }} />
                 <div className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
                 <div className="w-2 h-2 rounded-full bg-primary/80 animate-bounce" style={{ animationDelay: "300ms" }} />

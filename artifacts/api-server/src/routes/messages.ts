@@ -8,7 +8,7 @@ import {
   getFileTreeAsString,
   ensureWorkspaceDir,
 } from "../lib/workspace-manager";
-import { generateCodeChanges } from "../lib/groq-client";
+import { streamThinking, generateCodeChanges } from "../lib/groq-client";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -48,7 +48,7 @@ router.get("/workspaces/:workspaceId/messages", requireAuth, async (req, res): P
   res.json(messages.map(serializeMessage));
 });
 
-// Send a message — streams SSE steps then a final done event
+// Send a message — streams SSE phases then a final done event
 router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): Promise<void> => {
   const body = SendMessageBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: "content is required" }); return; }
@@ -68,13 +68,19 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
     res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
   };
 
-  const step = (text: string, icon?: string) => {
-    send("step", { text, icon: icon ?? "arrow" });
+  const phase = (name: "thinking" | "preparing" | "working" | "finalizing") => {
+    send("phase", { name });
+  };
+
+  const step = (text: string) => {
+    send("step", { text });
   };
 
   try {
-    // 1. Save user message
-    step("Saving your message…", "save");
+    // ── PREPARING ──────────────────────────────────────────────────────────
+    phase("preparing");
+
+    step("Saving your message…");
     const userMsg = await Message.create({
       _id: crypto.randomUUID(),
       workspaceId: workspace._id,
@@ -84,17 +90,14 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
     });
     send("user_message", { message: serializeMessage(userMsg) });
 
-    // 2. Ensure workspace dir exists (recreate if /tmp was wiped)
     await ensureWorkspaceDir(workspace._id, workspace.name, workspace.type, workspace.template ?? null);
 
-    // 3. Read file tree
-    step("Reading project file tree…", "folder");
+    step("Reading project files…");
     const [fileTree, fileNodes] = await Promise.all([
       getFileTreeAsString(workspace._id),
       getFileTree(workspace._id),
     ]);
 
-    // 3. Load file contents
     const flattenFiles = (nodes: any[]): string[] => {
       const paths: string[] = [];
       for (const n of nodes) {
@@ -105,7 +108,7 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
     };
 
     const filePaths = flattenFiles(fileNodes).slice(0, 20);
-    step(`Loading ${filePaths.length} file${filePaths.length !== 1 ? "s" : ""} for context…`, "file");
+    step(`Loaded ${filePaths.length} file${filePaths.length !== 1 ? "s" : ""} for context`);
 
     const contextFiles: Array<{ path: string; content: string }> = [];
     for (const filePath of filePaths) {
@@ -119,15 +122,27 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
       }
     }
 
-    // 4. Call AI
-    step("Sending request to AI (Groq llama-3.3-70b)…", "bot");
+    // ── THINKING ───────────────────────────────────────────────────────────
+    phase("thinking");
+
+    try {
+      await streamThinking(body.data.content, fileTree, (chunk) => {
+        send("thinking_chunk", { text: chunk });
+      });
+    } catch (err) {
+      // Non-fatal — if thinking stream fails, continue to working phase
+      logger.warn({ err }, "Thinking stream failed, continuing");
+    }
+
+    // ── WORKING ────────────────────────────────────────────────────────────
+    phase("working");
+    step("Generating code changes…");
 
     let aiResult: { summary: string; fileChanges: any[] };
     try {
       aiResult = await generateCodeChanges(body.data.content, fileTree, contextFiles);
     } catch (err) {
       logger.error({ err }, "AI generation failed");
-      step("AI returned an error — saving failure message.", "error");
       const errMsg = await Message.create({
         _id: crypto.randomUUID(),
         workspaceId: workspace._id,
@@ -140,14 +155,13 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
       return;
     }
 
-    step(`AI returned ${aiResult.fileChanges.length} file change${aiResult.fileChanges.length !== 1 ? "s" : ""}…`, "sparkle");
+    step(`Planned ${aiResult.fileChanges.length} file change${aiResult.fileChanges.length !== 1 ? "s" : ""}`);
 
-    // 5. Apply file changes
     for (const change of aiResult.fileChanges) {
       if (change.action === "delete") {
-        step(`Deleting ${change.path}`, "trash");
+        step(`Deleting ${change.path}`);
       } else {
-        step(`Writing ${change.path}`, "write");
+        step(`${change.action === "create" ? "Creating" : "Updating"} ${change.path}`);
       }
       try {
         if (change.action !== "delete" && change.content != null) {
@@ -155,12 +169,14 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
         }
       } catch (err) {
         logger.warn({ err, path: change.path }, "Failed to apply file change");
-        step(`⚠ Could not write ${change.path}`, "warn");
+        step(`⚠ Could not write ${change.path}`);
       }
     }
 
-    // 6. Save assistant message
-    step("Saving response to database…", "save");
+    // ── FINALIZING ─────────────────────────────────────────────────────────
+    phase("finalizing");
+    step("Saving to database…");
+
     const assistantMsg = await Message.create({
       _id: crypto.randomUUID(),
       workspaceId: workspace._id,
@@ -169,11 +185,10 @@ router.post("/workspaces/:workspaceId/messages", requireAuth, async (req, res): 
       fileChanges: aiResult.fileChanges,
     });
 
-    step("Done!", "check");
+    step("Done");
     send("done", { message: serializeMessage(assistantMsg), fileChanges: aiResult.fileChanges });
   } catch (err) {
     logger.error({ err }, "Unexpected error in message handler");
-    step("Unexpected server error.", "error");
     send("done", { message: null, fileChanges: [], error: "Server error" });
   }
 

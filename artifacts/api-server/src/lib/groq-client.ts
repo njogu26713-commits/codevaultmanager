@@ -20,6 +20,10 @@ export interface AiCodeResult {
   fileChanges: FileChange[];
 }
 
+const THINKING_PROMPT = `You are a senior software engineer. A developer has given you a coding task.
+Briefly describe your plan in 2–3 sentences — what you will create or change and why.
+Be direct and technical. Do not write code yet, just your plan.`;
+
 const SYSTEM_PROMPT = `You are CodeVault, an expert AI software engineer embedded in a developer tool. You help users build, refactor, and improve their codebases.
 
 When given a task:
@@ -50,6 +54,36 @@ Rules:
 - Prefer minimal, focused changes over large rewrites
 - Never include binary files or lock files in fileChanges`;
 
+/**
+ * Streams the AI's thinking/reasoning as text chunks.
+ * Calls onChunk for each streamed token.
+ */
+export async function streamThinking(
+  prompt: string,
+  fileTree: string,
+  onChunk: (text: string) => void,
+): Promise<void> {
+  const groq = getGroqClient();
+
+  const userMessage = `Repository structure:\n\`\`\`\n${fileTree || "(empty)"}\n\`\`\`\n\nTask: ${prompt}`;
+
+  const stream = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: THINKING_PROMPT },
+      { role: "user", content: userMessage },
+    ],
+    stream: true,
+    temperature: 0.4,
+    max_tokens: 200,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content ?? "";
+    if (delta) onChunk(delta);
+  }
+}
+
 export async function generateCodeChanges(
   prompt: string,
   fileTree: string,
@@ -66,7 +100,7 @@ export async function generateCodeChanges(
 
   const userMessage = `Repository structure:
 \`\`\`
-${fileTree}
+${fileTree || "(empty — create all files from scratch)"}
 \`\`\`
 
 Current file contents:

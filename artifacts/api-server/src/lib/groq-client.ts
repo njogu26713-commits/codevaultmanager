@@ -37,32 +37,36 @@ You receive messages from a developer. They may be:
 - A general dev question ("what's the difference between X and Y?", "how should I structure this?")
 - A mix of both
 
-Decide which type it is and respond accordingly.
+Decide which type it is and respond with valid JSON only — no markdown fences, no text outside the JSON object.
 
-Always return ONLY valid JSON in this exact structure — no markdown, no text outside the JSON:
+For a QUESTION or DISCUSSION, respond with:
 {
-  "type": "chat" | "code",
-  "reply": "Your full conversational response. For chat: a thorough, friendly developer explanation. For code: a brief summary of what you did.",
-  "summary": "One sentence shown as the chat bubble (same as reply for chat, brief for code)",
+  "type": "chat",
+  "reply": "Your thorough, friendly developer answer here. Explain the why, trade-offs, and alternatives.",
+  "summary": "One-sentence version of the reply.",
   "fileChanges": []
 }
 
-When type is "chat" (questions, explanations, discussion):
-- reply must be a thorough, friendly answer a senior developer would give
-- Explain the why, the trade-offs, the alternatives where relevant
-- You can reference the user's files if helpful
-- fileChanges must be an empty array []
+For a CODING TASK, respond with:
+{
+  "type": "code",
+  "reply": "Brief explanation of what you did and why.",
+  "summary": "One sentence describing the change.",
+  "fileChanges": [
+    { "path": "relative/path/to/file.ext", "action": "create", "content": "complete file content" },
+    { "path": "other/file.ext", "action": "modify", "content": "complete file content" },
+    { "path": "old/file.ext", "action": "delete", "content": null }
+  ]
+}
 
-When type is "code" (implementation tasks):
-- reply is a short explanation of what you did and why
-- summary is one sentence describing the change
-- fileChanges contains all file changes
-- ALWAYS produce at least one file change for code tasks
-- If the workspace is empty or only has a README, create the necessary files from scratch
-- For create/modify: provide the COMPLETE file content
-- For delete: set content to null
-- Never include binary files or lock files in fileChanges
-- Respect existing architecture and style; prefer focused changes over rewrites`;
+Rules for coding tasks:
+- action must be exactly "create", "modify", or "delete"
+- For create and modify, always provide the COMPLETE file content — never a diff or partial snippet
+- For delete, set content to null
+- ALWAYS produce at least one file change — never return an empty fileChanges array for a coding task
+- If the workspace is empty or only has a README, create all necessary files from scratch
+- Never include binary files, lock files, or node_modules in fileChanges
+- Respect existing code architecture and style; prefer focused changes over large rewrites`;
 
 
 /**
@@ -131,7 +135,21 @@ Task: ${prompt}`;
       max_tokens: 8192,
     });
 
-    const content = response.choices[0]?.message?.content ?? "{}";
+    const raw = response.choices[0]?.message?.content ?? "{}";
+
+    // Strip markdown code fences if the model wraps its output
+    let content = raw.trim();
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (fenceMatch) content = fenceMatch[1];
+
+    // Find the outermost JSON object as a last-resort fallback
+    if (!content.startsWith("{")) {
+      const start = content.indexOf("{");
+      const end = content.lastIndexOf("}");
+      if (start !== -1 && end !== -1) content = content.slice(start, end + 1);
+    }
+
+    logger.debug({ content }, "Raw AI response");
     const parsed = JSON.parse(content) as Partial<AiCodeResult>;
 
     const type = parsed.type === "chat" ? "chat" : "code";

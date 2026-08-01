@@ -37,5 +37,10 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if (window.location.host === 'codevault--replit.repl.co') {
+        window.location = 'https://codevault--replit.repl.co';
+      }
+    </script>
   </body>
 </html>

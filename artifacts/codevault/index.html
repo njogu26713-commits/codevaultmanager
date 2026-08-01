@@ -16,6 +16,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        background-color: #f0f0f0;
+        animation: fade-in 2s;
+      }
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      #root {
+        animation: scale-in 2s;
+      }
+      @keyframes scale-in {
+        from { transform: scale(0.5); }
+        to { transform: scale(1); }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
